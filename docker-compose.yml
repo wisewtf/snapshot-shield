@@ -1,0 +1,14 @@
+version: '3.8'
+
+services:
+  snapshot-shield:
+    image: snapshot-shield
+    container_name: snapshot-shield
+    build:
+      context: .
+    network_mode: host
+    volumes:
+      - /path/to/config.toml:/app/config.toml
+    environment:
+      - CRON_SCHEDULE=${CRON_SCHEDULE:-"0 8 * * *"}
+    restart: unless-stopped

@@ -1,0 +1,5 @@
+pyvmomi
+requests
+colorama
+argparse
+tomli

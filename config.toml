@@ -1,0 +1,7 @@
+[vcenter]
+host = "VCENTER_URL"
+user = "VCENTER_SERVICE_USER"
+password = "VCENTER_SERVICE_PASSWORD"
+
+[mattermost]
+url = "https://MATTERMOST_URL/hooks/TOKEN"
