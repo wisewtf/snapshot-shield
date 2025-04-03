@@ -1,0 +1,134 @@
+- name: Deploy snapshotshield
+  hosts: all
+  become: true
+  vars_prompt:
+
+    - name: vcenter_host
+      prompt: Specify the vcenter fqdn
+      private: false
+
+    - name: vcenter_user
+      prompt: Specify the snaptshot shield read-only vcenter user (eg name@vsphere.local)
+      private: false
+
+    - name: vcenter_password
+      prompt: Specify the snaptshot shield read-only vcenter password
+      private: true
+
+    - name: mattermost_webhook
+      prompt: Specify the client's unique Mattermost webhook URL
+      private: true
+
+  tasks:
+
+    - name: Remove old shell script if present
+      ansible.builtin.file:
+        path: /root/snapshotshield.sh
+        state: absent
+
+    - name: Deploy new shell script
+      ansible.builtin.blockinfile:
+        path: /root/snapshotshield.sh
+        block: |
+          #!/bin/bash
+
+          source /root/.bashrc
+
+          /usr/bin/python3 /root/snapshotshield_auto.py >> /var/log/snapshotshield.log 2>&1
+        create: true
+        mode: '700'
+
+    - name: Remove old snapshotshield configuration if present
+      ansible.builtin.file:
+        path: /root/snapshotshield.toml
+        state: absent
+
+    - name: Deploy new snapshotshield configuration
+      ansible.builtin.blockinfile:
+        path: /root/config.toml
+        block: |
+          [vcenter]
+          host = "{{ vcenter_host | lower }}"
+          user = "{{ vcenter_user | lower }}"
+          password = "{{ vcenter_password | lower }}"
+
+          [mattermost]
+          url = "{{ mattermost_webhook | lower }}"
+        create: true
+        mode: '400'
+
+    - name: Remove old snapshotshield if present
+      ansible.builtin.file:
+        path: /root/snapshotshield_auto.py
+        state: absent
+
+    - name: Copy snapshotshield to server
+      ansible.builtin.copy:
+        src: ./script.py
+        dest: /root/snapshotshield_auto.py
+        owner: root
+        group: root
+        mode: '0400'
+
+    - name: Installing snapshotshield requirements
+      ansible.builtin.pip:
+        name:
+          - tomli
+          - pyvmomi
+          - requests
+        break_system_packages: true
+
+    - name: Remove old systemd service if present
+      ansible.builtin.file:
+        path: /etc/systemd/system/snapshotshield.service
+        state: absent
+
+    - name: Remove old systemd timer if present
+      ansible.builtin.file:
+        path: /etc/systemd/system/snapshotshield.timer
+        state: absent
+
+    - name: Deploy new snapshotshield systemd service
+      ansible.builtin.blockinfile:
+        path: /etc/systemd/system/snapshotshield.service
+        block: |
+          [Unit]
+          Description=Runs headless snapshotshield's bash script
+
+          [Service]
+          Type=simple
+          ExecStart=/root/snapshotshield.sh
+          User=root
+        create: true
+        mode: '644'
+
+    - name: Deploy new snapshotshield systemd timer
+      ansible.builtin.blockinfile:
+        path: /etc/systemd/system/snapshotshield.timer
+        block: |
+          [Unit]
+          Description=Timer to run Snapshotshield
+
+          [Timer]
+          OnCalendar=*-*-* 08:00:00
+          Persistent=true
+
+          [Install]
+          WantedBy=timers.target
+        create: true
+        mode: '644'
+
+    - name: Force daemon reload
+      ansible.builtin.systemd_service:
+        daemon_reload: true
+
+    - name: Enable snapshotshield service
+      ansible.builtin.systemd_service:
+        name: snapshotshield
+        enabled: true
+
+    - name: Enable snapshotshield timer
+      ansible.builtin.systemd_service:
+        name: snapshotshield.timer
+        state: started
+        enabled: true
